@@ -12,8 +12,8 @@ from sklearn import metrics, preprocessing
 from talib.abstract import *
 from sklearn.externals import joblib
 
-import Quandl
-
+import quandl
+plt.close('all')
 '''
 Name:        The Self Learning Quant, Example 3
 
@@ -40,13 +40,13 @@ backtest.py from the TWP library. Download backtest.py and put in the same folde
 #Load data
 def read_convert_data(symbol='XBTEUR'):
     if symbol == 'XBTEUR':
-        prices = Quandl.get("BCHARTS/KRAKENEUR")
+        prices = quandl.get("CHRIS/CME_JY1")
         prices.to_pickle('data/XBTEUR_1day.pkl') # a /data folder must exist
     if symbol == 'EURUSD_1day':
-        #prices = Quandl.get("ECB/EURUSD")
-        prices = pd.read_csv('data/EURUSD_1day.csv',sep=",", skiprows=0, header=0, index_col=0, parse_dates=True, names=['ticker', 'date', 'time', 'open', 'low', 'high', 'close'])
+        prices = quandl.get("ECB/EURUSD")
+        #prices = pd.read_csv('data/EURUSD_1day.csv',sep=",", skiprows=0, header=0, index_col=0, parse_dates=True, names=['ticker', 'date', 'time', 'open', 'low', 'high', 'close'])
         prices.to_pickle('data/EURUSD_1day.pkl')
-    print(prices)
+    #print(prices)
     return
 
 def load_data(test=False):
@@ -54,10 +54,11 @@ def load_data(test=False):
     #prices = pd.read_pickle('data/EURUSD_1day.pkl')
     #prices.rename(columns={'Value': 'close'}, inplace=True)
     prices = pd.read_pickle('data/XBTEUR_1day.pkl')
-    prices.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume (BTC)': 'volume'}, inplace=True)
-    print(prices)
-    x_train = prices.iloc[-2000:-300,]
-    x_test= prices.iloc[-2000:,]
+    prices.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Last': 'close', 'Volume (BTC)': 'volume'}, inplace=True)
+    #prices.rename(columns={'Last': 'close'}, inplace=True)
+    #print(prices)
+    x_train = prices.iloc[-1000:-500,]
+    x_test= prices.iloc[-1000:,]
     if test:
         return x_test
     else:
@@ -102,7 +103,7 @@ def take_action(state, xdata, action, signal, time_step):
         terminal_state = 1
         signal.loc[time_step] = 0
 
-        return state, time_step, signal, terminal_state
+        return state, time_step, signal, terminal_state #next state, next time_step
 
     #move the market data window one step forward
     state = xdata[time_step-1:time_step, 0:1, :]
@@ -113,40 +114,46 @@ def take_action(state, xdata, action, signal, time_step):
         signal.loc[time_step] = -100
     else:
         signal.loc[time_step] = 0
-    #print(state)
+    #print(state)-
     terminal_state = 0
     #print(signal)
 
-    return state, time_step, signal, terminal_state
+    return state, time_step, signal, terminal_state #next state, next time_step
 
 #Get Reward, the reward is returned at the end of an episode
 def get_reward(new_state, time_step, action, xdata, signal, terminal_state, eval=False, epoch=0):
     reward = 0
     signal.fillna(value=0, inplace=True)
 
-    if eval == False:
+    if terminal_state == 0:  
         bt = twp.Backtest(pd.Series(data=[x for x in xdata[time_step-2:time_step]], index=signal[time_step-2:time_step].index.values), signal[time_step-2:time_step], signalType='shares')
-        reward = ((bt.data['price'].iloc[-1] - bt.data['price'].iloc[-2])*bt.data['shares'].iloc[-1])
+        reward = ((bt.data['price'].iloc[-1] - bt.data['price'].iloc[-2])*bt.data['shares'].iloc[-1]) #reward latest time_step
+        return reward
 
-    if terminal_state == 1 and eval == True:
+    if terminal_state == 1: 
         #save a figure of the test set
         bt = twp.Backtest(pd.Series(data=[x for x in xdata], index=signal.index.values), signal, signalType='shares')
-        reward = bt.pnl.iloc[-1]
-        plt.figure(figsize=(3,4))
-        bt.plotTrades()
-        plt.axvline(x=400, color='black', linestyle='--')
-        plt.text(250, 400, 'training data')
-        plt.text(450, 400, 'test data')
-        plt.suptitle(str(epoch))
-        plt.savefig('plt/'+str(epoch)+'.png', bbox_inches='tight', pad_inches=1, dpi=72)
-        plt.close('all')
-    #print(time_step, terminal_state, eval, reward)
-
-    return reward
+        reward = bt.pnl.iloc[-1] #reward for all time_steps
+        if eval == True:
+            sharpe = bt.sharpe
+            #plt.figure(figsize=(3,4))
+            #bt.plotTrades()
+            #plt.axvline(x=400, color='black', linestyle='--')
+            #plt.text(250, 400, 'training data')
+            #plt.text(450, 400, 'test data')
+            #plt.suptitle(str(epoch))
+            #plt.savefig('plt/'+str(epoch)+'.png', bbox_inches='tight', pad_inches=1, dpi=72)
+            #plt.close('all')
+            #plt.show()
+            return reward, sharpe
+        else:
+            return reward
+    #print(time_step, terminal_state, eval, rewar
+    
 
 def evaluate_Q(eval_data, eval_model, price_data, epoch=0):
-    #This function is used to evaluate the performance of the system each epoch, without the influence of epsilon and random actions
-    signal = pd.Series(index=np.arange(len(eval_data)))
+    """This function is used to evaluate the performance of the system each epoch, without the influence of epsilon and random actions"""
+    signal = pd.Series(index=np.arange(len(eval_data))) #use test data
     state, xdata, price_data = init_state(eval_data)
     status = 1
     terminal_state = 0
@@ -158,13 +165,13 @@ def evaluate_Q(eval_data, eval_model, price_data, epoch=0):
         action = (np.argmax(qval))
         #Take action, observe new state S'
         new_state, time_step, signal, terminal_state = take_action(state, xdata, action, signal, time_step)
-        #Observe reward
-        eval_reward = get_reward(new_state, time_step, action, price_data, signal, terminal_state, eval=True, epoch=epoch)
         state = new_state
         if terminal_state == 1: #terminal state
+         #Observe reward
+            eval_reward, eval_sharpe = get_reward(new_state, time_step, action, price_data, signal, terminal_state, eval=True, epoch=epoch) #reward for all time_steps
             status = 0
 
-    return eval_reward
+    return eval_reward, eval_sharpe
 
 #This neural network is the the Q-function, run it like this:
 #model.predict(state.reshape(1,64), batch_size=1)
@@ -191,10 +198,10 @@ model.add(LSTM(64,
                stateful=False))
 model.add(Dropout(0.5))
 
-model.add(Dense(4, init='lecun_uniform'))
+model.add(Dense(4, init='lecun_uniform')) #4 actions
 model.add(Activation('linear')) #linear output so we can have range of real-valued outputs
 
-rms = RMSprop()
+#rms = RMSprop()
 adam = Adam()
 model.compile(loss='mse', optimizer=adam)
 
@@ -206,14 +213,13 @@ start_time = timeit.default_timer()
 read_convert_data(symbol='XBTEUR') #run once to read indata, resample and convert to pickle
 indata = load_data()
 test_data = load_data(test=True)
-epochs = 100
+epochs = 10
 gamma = 0.95 #since the reward can be several time steps away, make gamma high
 epsilon = 1
-batchSize = 100
-buffer = 200
-replay = []
+batchSize = 50
+buffer = 100
+replay = [] #stores tuples of (S, A, R, S')
 learning_progress = []
-#stores tuples of (S, A, R, S')
 h = 0
 #signal = pd.Series(index=market_data.index)
 signal = pd.Series(index=np.arange(len(indata)))
@@ -248,7 +254,7 @@ for i in range(epochs):
         else: #if buffer full, overwrite old values
             if (h < (buffer-1)):
                 h += 1
-            else:
+            else: #only starts training when buffer is full
                 h = 0
             replay[h] = (state, action, reward, new_state)
             #randomly sample our experience replay memory
@@ -269,19 +275,20 @@ for i in range(epochs):
                     update = reward
                 y[0][action] = update
                 #print(time_step, reward, terminal_state)
-                X_train.append(old_state)
+                X_train.append(old_state) #produces old_qval
                 y_train.append(y.reshape(4,))
 
             X_train = np.squeeze(np.array(X_train), axis=(1))
             y_train = np.array(y_train)
             model.fit(X_train, y_train, batch_size=batchSize, nb_epoch=1, verbose=0)
             
-            state = new_state
+        state = new_state
+            
         if terminal_state == 1: #if reached terminal state, update epoch status
             status = 0
-    eval_reward = evaluate_Q(test_data, model, price_data, i)
+    eval_reward, eval_sharpe = evaluate_Q(test_data, model, price_data, i)
     learning_progress.append((eval_reward))
-    print("Epoch #: %s Reward: %f Epsilon: %f" % (i,eval_reward, epsilon))
+    print("Epoch #: %s Reward: %f Sharpe: %f Epsilon: %f" % (i, eval_reward, eval_sharpe, epsilon))
     #learning_progress.append((reward))
     if epsilon > 0.1: #decrement epsilon over time
         epsilon -= (1.0/epochs)
@@ -293,7 +300,7 @@ print("Completed in %f" % (elapsed,))
 bt = twp.Backtest(pd.Series(data=[x[0,0] for x in xdata]), signal, signalType='shares')
 bt.data['delta'] = bt.data['shares'].diff().fillna(0)
 
-print(bt.data)
+#print(bt.data)
 unique, counts = np.unique(filter(lambda v: v==v, signal.values), return_counts=True)
 print(np.asarray((unique, counts)).T)
 
@@ -305,7 +312,5 @@ bt.pnl.plot(style='x-')
 plt.subplot(3,1,3)
 plt.plot(learning_progress)
 
-plt.savefig('plt/summary'+'.png', bbox_inches='tight', pad_inches=1, dpi=72)
-#plt.show()
-
-
+#plt.savefig('plt/summary'+'.png', bbox_inches='tight', pad_inches=1, dpi=72)
+plt.show()

@@ -40,14 +40,14 @@ def load_data():
 def init_state(data):
     
     close = data
-    diff = np.diff(data)
-    diff = np.insert(diff, 0, 0)
+    diff = np.diff(data) #returns
+    diff = np.insert(diff, 0, 0) #initialise first state to zero
     
     #--- Preprocess data
     xdata = np.column_stack((close, diff))
     xdata = np.nan_to_num(xdata)
-    scaler = preprocessing.StandardScaler()
-    xdata = scaler.fit_transform(xdata)
+    scaler = preprocessing.StandardScaler() 
+    xdata = scaler.fit_transform(xdata) #normalise
     
     state = xdata[0:1, :]
     return state, xdata
@@ -55,7 +55,7 @@ def init_state(data):
 #Take Action
 def take_action(state, xdata, action, signal, time_step):
     #this should generate a list of trade signals that at evaluation time are fed to the backtester
-    #the backtester should get a list of trade signals and a list of price data for the assett
+    #the backtester should get a list of trade signals and a list of price data for the asset
     
     #make necessary adjustments to state and then return it
     time_step += 1
@@ -105,6 +105,7 @@ def get_reward(new_state, time_step, action, xdata, signal, terminal_state, epoc
 
 def evaluate_Q(eval_data, eval_model):
     #This function is used to evaluate the perofrmance of the system each epoch, without the influence of epsilon and random actions
+    #select actions from max{Q(s)}
     signal = pd.Series(index=np.arange(len(eval_data)))
     state, xdata = init_state(eval_data)
     status = 1
@@ -152,9 +153,12 @@ import random, timeit
 start_time = timeit.default_timer()
 
 indata = load_data()
+
+#hyperparameters
 epochs = 10
 gamma = 0.9 #a high gamma makes a long term reward more valuable
 epsilon = 1
+
 learning_progress = []
 #stores tuples of (S, A, R, S')
 h = 0
@@ -172,7 +176,7 @@ for i in range(epochs):
         qval = model.predict(state.reshape(1,2), batch_size=1)
         if (random.random() < epsilon) and i != epochs - 1: #maybe choose random action if not the last epoch
             action = np.random.randint(0,4) #assumes 4 different actions
-        else: #choose best action from Q(s,a) values
+        else: #choose best action from Q(S,a) values
             action = (np.argmax(qval))
         #Take action, observe new state S'
         new_state, time_step, signal, terminal_state = take_action(state, xdata, action, signal, time_step)
