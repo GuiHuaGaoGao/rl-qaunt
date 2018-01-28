@@ -15,7 +15,7 @@ from sklearn import metrics, preprocessing
 from sklearn.externals import joblib
 
 import quandl
-plt.close('all')
+#plt.close('all')
 '''
 Name:        The Self Learning Quant, Example 3
 
