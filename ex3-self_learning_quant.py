@@ -7,9 +7,11 @@ np.set_printoptions(precision=5, suppress=True, linewidth=150)
 
 import pandas as pd
 import backtest as twp
+import pandas_talib as ta
+ta.SETTINGS.join=False # just return indicators
 from matplotlib import pyplot as plt
 from sklearn import metrics, preprocessing
-from talib.abstract import *
+#from talib.abstract import *
 from sklearn.externals import joblib
 
 import quandl
@@ -41,22 +43,23 @@ backtest.py from the TWP library. Download backtest.py and put in the same folde
 def read_convert_data(symbol='XBTEUR'):
     if symbol == 'XBTEUR':
         prices = quandl.get("CHRIS/CME_JY1")
-        prices.to_pickle('data/XBTEUR_1day.pkl') # a /data folder must exist
+        #prices.to_pickle('data/XBTEUR_1day.pkl') # a /data folder must exist
     if symbol == 'EURUSD_1day':
         prices = quandl.get("ECB/EURUSD")
         #prices = pd.read_csv('data/EURUSD_1day.csv',sep=",", skiprows=0, header=0, index_col=0, parse_dates=True, names=['ticker', 'date', 'time', 'open', 'low', 'high', 'close'])
-        prices.to_pickle('data/EURUSD_1day.pkl')
+        #prices.to_pickle('data/EURUSD_1day.pkl')
     #print(prices)
     return
 
 def load_data(test=False):
+    prices = quandl.get("CHRIS/CME_JY1")
     #prices = pd.read_pickle('data/OILWTI_1day.pkl')
     #prices = pd.read_pickle('data/EURUSD_1day.pkl')
     #prices.rename(columns={'Value': 'close'}, inplace=True)
-    prices = pd.read_pickle('data/XBTEUR_1day.pkl')
-    prices.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Last': 'close', 'Volume (BTC)': 'volume'}, inplace=True)
+    #prices = pd.read_pickle('data/XBTEUR_1day.pkl')
+    prices.rename(columns={'Open': 'open', 'Last': 'Close', 'Volume (BTC)': 'volume'}, inplace=True)
     #prices.rename(columns={'Last': 'close'}, inplace=True)
-    #print(prices)
+    print(prices)
     x_train = prices.iloc[-1000:-500,]
     x_test= prices.iloc[-1000:,]
     if test:
@@ -66,13 +69,13 @@ def load_data(test=False):
 
 #Initialize first state, all items are placed deterministically
 def init_state(indata, test=False):
-    close = indata['close'].values
+    close = indata['Close'].values
     diff = np.diff(close)
     diff = np.insert(diff, 0, 0)
-    sma15 = SMA(indata, timeperiod=15)
-    sma60 = SMA(indata, timeperiod=60)
-    rsi = RSI(indata, timeperiod=14)
-    atr = ATR(indata, timeperiod=14)
+    sma15 = ta.SMA(indata, 15)
+    sma60 = ta.SMA(indata, 60)
+    rsi = ta.RSI(indata.reset_index(), 14)
+    atr = ta.ATR(indata.reset_index(), 14)
 
     #--- Preprocess data
     xdata = np.column_stack((close, diff, sma15, close-sma15, sma15-sma60, rsi, atr))
@@ -81,9 +84,10 @@ def init_state(indata, test=False):
     if test == False:
         scaler = preprocessing.StandardScaler()
         xdata = np.expand_dims(scaler.fit_transform(xdata), axis=1)
-        joblib.dump(scaler, 'data/scaler.pkl')
+        #oblib.dump(scaler, 'data/scaler.pkl')
     elif test == True:
-        scaler = joblib.load('data/scaler.pkl')
+        scaler = preprocessing.StandardScaler()
+        #scaler = joblib.load('data/scaler.pkl')
         xdata = np.expand_dims(scaler.fit_transform(xdata), axis=1)
     state = xdata[0:1, 0:1, :]
     
@@ -213,7 +217,7 @@ start_time = timeit.default_timer()
 read_convert_data(symbol='XBTEUR') #run once to read indata, resample and convert to pickle
 indata = load_data()
 test_data = load_data(test=True)
-epochs = 10
+epochs = 20
 gamma = 0.95 #since the reward can be several time steps away, make gamma high
 epsilon = 1
 batchSize = 50
@@ -304,13 +308,13 @@ bt.data['delta'] = bt.data['shares'].diff().fillna(0)
 unique, counts = np.unique(filter(lambda v: v==v, signal.values), return_counts=True)
 print(np.asarray((unique, counts)).T)
 
-plt.figure()
-plt.subplot(3,1,1)
-bt.plotTrades()
-plt.subplot(3,1,2)
-bt.pnl.plot(style='x-')
-plt.subplot(3,1,3)
-plt.plot(learning_progress)
+#plt.figure()
+#plt.subplot(3,1,1)
+#bt.plotTrades()
+#plt.subplot(3,1,2)
+#bt.pnl.plot(style='x-')
+#plt.subplot(3,1,3)
+#plt.plot(learning_progress)
 
 #plt.savefig('plt/summary'+'.png', bbox_inches='tight', pad_inches=1, dpi=72)
-plt.show()
+#plt.show()
