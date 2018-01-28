@@ -9,7 +9,7 @@ import pandas as pd
 import backtest as twp
 import pandas_talib as ta
 ta.SETTINGS.join=False # just return indicators
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 from sklearn import metrics, preprocessing
 #from talib.abstract import *
 from sklearn.externals import joblib
